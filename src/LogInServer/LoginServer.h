@@ -39,6 +39,8 @@ private:
 	std::string m_ODBCName, m_ODBCLogin, m_ODBCPwd;
 	short	m_sLastVersion;
 
+	uint32 m_LoginServerPort;
+
 	VersionInfoList		m_VersionList;
 	ServerInfoList		m_ServerList;
 
@@ -46,7 +48,7 @@ private:
 
 	RWLock m_patchListLock;
 	Packet m_serverListPacket;
-	FastMutex m_lock, m_serverListLock;
+	std::recursive_mutex m_lock, m_serverListLock;
 
 	FILE *m_fpLoginServer;
 public:
