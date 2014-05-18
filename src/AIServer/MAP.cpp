@@ -56,17 +56,19 @@ bool MAP::Initialize(_ZONE_INFO *pZone)
 
 	if (m_smdFile != nullptr)
 	{
-		ObjectEventArray * pEvents = m_smdFile->GetObjectEventArray();
 		SetZoneAttributes(m_nZoneNumber);
-		foreach_stlmap(itr, (*pEvents))
+		foreach_stlmap(itr, g_pMain->m_ObjectEventArray)
 		{
-			_OBJECT_EVENT * pEvent = itr->second;
-			if (pEvent->sType == OBJECT_GATE
-				|| pEvent->sType == OBJECT_GATE2
-				|| pEvent->sType == OBJECT_GATE_LEVER
-				|| pEvent->sType == OBJECT_ANVIL
-				|| pEvent->sType == OBJECT_ARTIFACT)
-				g_pMain->AddObjectEventNpc(pEvent, this);
+			if (itr->second->sZoneID == m_nZoneNumber)
+			{
+				_OBJECT_EVENT * pEvent = itr->second;
+				if (pEvent->sType == OBJECT_GATE
+					|| pEvent->sType == OBJECT_GATE2
+					|| pEvent->sType == OBJECT_GATE_LEVER
+					|| pEvent->sType == OBJECT_ANVIL
+					|| pEvent->sType == OBJECT_ARTIFACT)
+					g_pMain->AddObjectEventNpc(pEvent, this);
+			}
 		}
 
 		m_ppRegion = new CRegion*[m_smdFile->m_nXRegion];
@@ -124,18 +126,17 @@ bool MAP::IsMovable(int dest_x, int dest_y)
 	return m_smdFile->GetEventID(dest_x, dest_y) == 0;
 }
 
-bool MAP::ObjectIntersect(float x1, float z1, float y1, float x2, float z2, float y2)
-{
-	return m_smdFile->ObjectCollision(x1, z1, y1, x2, z2, y2);
-}
-
 void MAP::RegionUserAdd(int rx, int rz, int uid)
 {
 	if (rx < 0 || rz < 0 || rx > GetXRegionMax() || rz > GetZRegionMax())
 		return;
 
-	FastGuard lock(m_lock);
+	Guard lock(m_lock);
 	CRegion * pRegion = &m_ppRegion[rx][rz];
+
+	if (pRegion == nullptr)
+		return;
+
 	int *pInt = new int;
 	*pInt = uid;
 	if (!pRegion->m_RegionUserArray.PutData(uid, pInt))
@@ -149,8 +150,12 @@ bool MAP::RegionUserRemove(int rx, int rz, int uid)
 	if (rx < 0 || rz < 0 || rx > GetXRegionMax() || rz > GetZRegionMax())
 		return false;
 
-	FastGuard lock(m_lock);
+	Guard lock(m_lock);
 	CRegion * pRegion = &m_ppRegion[rx][rz];
+
+	if (pRegion == nullptr)
+		return false;
+
 	pRegion->m_RegionUserArray.DeleteData(uid);
 	pRegion->m_byMoving = !pRegion->m_RegionUserArray.IsEmpty();
 	return true;
@@ -161,7 +166,7 @@ void MAP::RegionNpcAdd(int rx, int rz, int nid)
 	if (rx < 0 || rz < 0 || rx > GetXRegionMax() || rz > GetZRegionMax())
 		return;
 
-	FastGuard lock(m_lock);
+	Guard lock(m_lock);
 	int *pInt = new int;
 	*pInt = nid;
 	if (!m_ppRegion[rx][rz].m_RegionNpcArray.PutData(nid, pInt))
@@ -173,7 +178,7 @@ bool MAP::RegionNpcRemove(int rx, int rz, int nid)
 	if (rx < 0 || rz < 0 || rx > GetXRegionMax() || rz > GetZRegionMax())
 		return false;
 
-	FastGuard lock(m_lock);
+	Guard lock(m_lock);
 	m_ppRegion[rx][rz].m_RegionNpcArray.DeleteData( nid );
 	return true;
 }
@@ -185,7 +190,7 @@ CRegion * MAP::GetRegion(uint16 regionX, uint16 regionZ)
 		|| regionZ > GetZRegionMax())
 		return nullptr;
 
-	FastGuard lock(m_lock);
+	Guard lock(m_lock);
 	return &m_ppRegion[regionX][regionZ];
 }
 
@@ -226,7 +231,7 @@ bool MAP::LoadRoomEvent()
 			buf[index] = (uint8) 0;
 			t_index = 0;
 
-			if( buf[t_index] == ';' || buf[t_index] == '/' )	{		// ÁÖ¼®¿¡ ´ëÇÑ Ã³¸®
+			if( buf[t_index] == ';' || buf[t_index] == '/' )	{		// ÃÃ–Â¼Â®Â¿Â¡ Â´Ã«Ã‡Ã‘ ÃƒÂ³Â¸Â®
 				index = 0;
 				continue;
 			}
@@ -369,13 +374,13 @@ int MAP::IsRoomCheck(float fx, float fz)
 				pRoom->m_tDelayTime = UNIXTIME;
 				room_number = itr->first;
 				TRACE(" Room Check - number = %d, x=%d, z=%d\n", room_number, nX, nZ);
-				//wsprintf(notify, "** ¾Ë¸² : [%d Zone][%d] ¹æ¿¡ µé¾î¿À½Å°ÍÀ» È¯¿µÇÕ´Ï´Ù **", m_nZoneNumber, pRoom->m_sRoomNumber);
+				//wsprintf(notify, "** Â¾Ã‹Â¸Â² : [%d Zone][%d] Â¹Ã¦Â¿Â¡ ÂµÃ©Â¾Ã®Â¿Ã€Â½Ã…Â°ÃÃ€Â» ÃˆÂ¯Â¿ÂµÃ‡Ã•Â´ÃÂ´Ã™ **", m_nZoneNumber, pRoom->m_sRoomNumber);
 				//g_pMain->SendSystemMsg(notify, PUBLIC_CHAT);
 			}
 			else // room already in progress
 			{
 				pRoom->m_byStatus = RoomStatusCleared;
-				//wsprintf(notify, "** ¾Ë¸² : [%d Zone][%d] ¸ñÇ¥ÁöÁ¡±îÁö µµÂøÇØ¼­ Å¬¸®¾î µË´Ï´Ù¤· **", m_nZoneNumber, pRoom->m_sRoomNumber);
+				//wsprintf(notify, "** Â¾Ã‹Â¸Â² : [%d Zone][%d] Â¸Ã±Ã‡Â¥ÃÃ¶ÃÂ¡Â±Ã®ÃÃ¶ ÂµÂµÃ‚Ã¸Ã‡Ã˜Â¼Â­ Ã…Â¬Â¸Â®Â¾Ã® ÂµÃ‹Â´ÃÂ´Ã™Â¤Â· **", m_nZoneNumber, pRoom->m_sRoomNumber);
 				//g_pMain->SendSystemMsg(notify, PUBLIC_CHAT);
 			}
 
