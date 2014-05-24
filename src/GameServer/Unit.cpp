@@ -35,7 +35,7 @@ void Unit::Initialize()
 	m_sDaggerR = m_sSwordR = m_sAxeR = m_sMaceR = m_sSpearR = m_sBowR = 0;		
 	m_byDaggerRAmount = m_byBowRAmount = 100;
 
-	FastGuard lock(m_equippedItemBonusLock);
+	Guard lock(m_equippedItemBonusLock);
 	m_equippedItemBonuses.clear();
 
 	m_bCanStealth = true;
@@ -67,6 +67,8 @@ void Unit::Initialize()
 	m_bManaAbsorb = 0;
 	m_bRadiusAmount = 0;
 	m_buffCount = 0;
+
+	m_oSocketID = -1;
 	m_bEventRoom = 0;
 
 	InitType3();
@@ -379,7 +381,7 @@ short CUser::GetDamage(Unit *pTarget, _MAGIC_TABLE *pSkill /*= nullptr*/, bool b
 		if (GetMap()->isWarZone())
 			damage /= 2;
 		else
-			damage /= 3;
+			damage /= 2;
 	}
 
 	// Enforce damage cap
@@ -589,7 +591,7 @@ short Unit::GetMagicDamage(int damage, Unit *pTarget, bool bPreviewOnly /*= fals
 	if (pTarget->isDead())
 		return 0;
 
-	FastGuard lock(m_equippedItemBonusLock);
+	Guard lock(m_equippedItemBonusLock);
 	int16 sReflectDamage = 0;
 
 	// Check each item that has a bonus effect.
@@ -674,11 +676,13 @@ short Unit::GetACDamage(int damage, Unit *pTarget)
 	if (pUser->isWeaponsDisabled())
 		return damage;
 
-	uint8 weaponSlots[] = { RIGHTHAND, LEFTHAND };
+	uint8 weaponSlots[] = { LEFTHAND, RIGHTHAND };
+
+	int firstdamage = damage;
 
 	foreach_array (slot, weaponSlots)
 	{
-		_ITEM_TABLE * pWeapon = pUser->GetItemPrototype(slot);
+		_ITEM_TABLE * pWeapon = pUser->GetItemPrototype(weaponSlots[slot]);
 		if (pWeapon == nullptr)
 			continue;
 
@@ -809,16 +813,19 @@ void Unit::InitType3()
 	m_bType3Flag = false;
 }
 
-void Unit::InitType4(bool bRemoveSavedMagic /*= false*/)
+void Unit::InitType4(bool bRemoveSavedMagic /*= false*/, uint8 buffType /* = 0 */)
 {
 	// Remove all buffs that should not be recast.
-	FastGuard lock(m_buffLock);
+	Guard lock(m_buffLock);
 	Type4BuffMap buffMap = m_buffMap; // copy the map
 
 	for (auto itr = buffMap.begin(); itr != buffMap.end(); itr++)
 	{
 #ifdef GAMESERVER
-		CMagicProcess::RemoveType4Buff(itr->first, this, bRemoveSavedMagic);
+		if (buffType > 0 && itr->second.m_bBuffType != buffType)
+			continue;
+
+		CMagicProcess::RemoveType4Buff(itr->first, this, bRemoveSavedMagic, buffType > 0 ? true : false);
 #endif
 	}
 }
@@ -913,7 +920,7 @@ bool Unit::CanCastRHit(uint16 m_socketID)
 	if (pUser->m_RHitRepeatList.find(m_socketID) != pUser->m_RHitRepeatList.end())
 	{
 		RHitRepeatList::iterator itr = pUser->m_RHitRepeatList.find(m_socketID);
-		if ((UNIXTIME - itr->second) < PLAYER_R_HIT_REQUEST_INTERVAL)
+		if (float(UNIXTIME - itr->second) < PLAYER_R_HIT_REQUEST_INTERVAL)
 			return false;
 		else
 		{
@@ -948,7 +955,7 @@ void Unit::SendDeathAnimation(Unit * pKiller /*= nullptr*/)
 
 void Unit::AddType4Buff(uint8 bBuffType, _BUFF_TYPE4_INFO & pBuffInfo)
 {
-	FastGuard lock(m_buffLock);
+	Guard lock(m_buffLock);
 	m_buffMap.insert(std::make_pair(bBuffType, pBuffInfo));
 
 	if (pBuffInfo.isBuff())
@@ -1076,6 +1083,11 @@ void KOMap::SetZoneAttributes(int zoneNumber)
 		m_zoneType = ZoneAbilityPVP;
 		m_zoneFlags = ZF_ATTACK_OTHER_NATION | ZF_WAR_ZONE;
 		break;
+	case ZONE_RONARK_LAND:
+		m_zoneType = ZoneAbilityPVP;
+		m_zoneFlags = ZF_ATTACK_OTHER_NATION;
+		m_byMinLevel = MIN_LEVEL_RONARK_LAND, m_byMaxLevel = MAX_LEVEL;
+		break;
 	case ZONE_ARDREAM:
 		m_zoneType = ZoneAbilityPVP;
 		m_zoneFlags = ZF_ATTACK_OTHER_NATION;
@@ -1086,11 +1098,6 @@ void KOMap::SetZoneAttributes(int zoneNumber)
 		m_zoneFlags = ZF_ATTACK_OTHER_NATION;
 		m_byMinLevel = MIN_LEVEL_RONARK_LAND_BASE, m_byMaxLevel = MAX_LEVEL_RONARK_LAND_BASE;
 		break;
-	case ZONE_RONARK_LAND:
-		m_zoneType = ZoneAbilityPVP;
-		m_zoneFlags = ZF_ATTACK_OTHER_NATION;
-		m_byMinLevel = MIN_LEVEL_RONARK_LAND, m_byMaxLevel = MAX_LEVEL;
-		break;
 	case ZONE_KROWAZ_DOMINION:
 		m_zoneType = ZoneAbilityPVPNeutralNPCs;
 		m_zoneFlags = ZF_TALK_OTHER_NATION | ZF_ATTACK_OTHER_NATION | ZF_FRIENDLY_NPCS;
@@ -1098,7 +1105,7 @@ void KOMap::SetZoneAttributes(int zoneNumber)
 		break;
 	case ZONE_BORDER_DEFENSE_WAR:
 		m_zoneType = ZoneAbilityPVP;
-		m_zoneFlags = ZF_ATTACK_OTHER_NATION;
+		m_zoneFlags = ZF_ATTACK_OTHER_NATION | ZF_FRIENDLY_NPCS;
 		break;
 	case ZONE_CHAOS_DUNGEON:
 		m_zoneType = ZoneAbilityPVP;
@@ -1108,6 +1115,10 @@ void KOMap::SetZoneAttributes(int zoneNumber)
 		m_zoneType = ZoneAbilityPVPNeutralNPCs;
 		m_zoneFlags = ZF_ATTACK_OTHER_NATION | ZF_FRIENDLY_NPCS;
 		m_byMinLevel = MIN_LEVEL_JURAD_MOUNTAIN, m_byMaxLevel = MAX_LEVEL;
+		break;
+	case ZONE_PRISON:
+		m_zoneType = ZoneAbilityPVPNeutralNPCs;
+		m_zoneFlags = ZF_ATTACK_OTHER_NATION | ZF_FRIENDLY_NPCS;
 		break;
 	case ZONE_ISILOON_ARENA:
 		m_zoneType = ZoneAbilityPVPNeutralNPCs;
@@ -1192,6 +1203,9 @@ bool CUser::isHostileTo(Unit * pTarget)
 		&& isInPVPZone())
 		return true;
 
+	if (isInTempleEventZone())
+		return true;
+
 	// Players cannot attack other players in any other circumstance.
 	return false;
 }
@@ -1267,6 +1281,16 @@ bool CUser::isInSafetyArea()
 	case ZONE_KARUS:
 		if (GetNation() == KARUS)
 			return ((GetX() < 1876.0f && GetX() > 1820.0f) && ((GetZ() < 212.0f && GetZ() > 136.0f)));
+	case ZONE_BATTLE:
+		if (GetNation() == KARUS)
+			return ((GetX() < 125.0f && GetX() > 98.0f) && ((GetZ() < 780.0f && GetZ() > 755.0f)));
+		else if (GetNation() == ELMORAD)
+			return ((GetX() < 831.0f && GetX() > 805.0f) && ((GetZ() < 110.0f && GetZ() > 85.0f)));
+	case ZONE_BATTLE2:
+		if (GetNation() == KARUS)
+			return ((GetX() < 977.0f && GetX() > 942.0f) && ((GetZ() < 904.0f && GetZ() > 863.0f)));
+		else if (GetNation() == ELMORAD)
+			return ((GetX() < 80.0f && GetX() > 46.0f) && ((GetZ() < 174.0f && GetZ() > 142.0f)));
 	}
 
 
