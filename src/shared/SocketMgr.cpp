@@ -168,7 +168,7 @@ void SocketMgr::Shutdown()
 
 	DecRef();
 	m_bShutdown = true;
-}
+}2
 
 void SocketMgr::SetupSockets()
 {
