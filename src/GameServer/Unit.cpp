@@ -41,7 +41,7 @@ void Unit::Initialize()
 	m_bCanStealth = true;
 	m_bReflectArmorType = 0;
 	m_bIsBlinded = false;
-	m_bCanUseSkills = m_bCanUsePotions = m_bCanTeleport = true;
+	m_bCanUseSkills = m_bCanUsePotions = m_bCanTeleport = true;1
 	m_bInstantCast = false;
 	m_bIsUndead = m_bIsKaul = false;
 
