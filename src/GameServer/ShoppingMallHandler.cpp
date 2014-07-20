@@ -8,20 +8,29 @@ void CUser::ShoppingMall(Packet & pkt)
 	switch (opcode)
 	{
 	case STORE_OPEN:
+		TRACE("STORE_OPEN\n");
 		HandleStoreOpen(pkt);
 		break;
 
 	case STORE_CLOSE:
+		TRACE("STORE_CLOSE\n");
 		HandleStoreClose();
 		break;
 
 	case STORE_BUY:
+		TRACE("STORE_BUY\n");
+		break;
+
 	case STORE_MINI: // not sure what this is
+		TRACE("STORE_MINI\n");
+		break;
+
 	case STORE_PROCESS:
-		/* fairly certain there's no need to emulate these as they're unused */
+		TRACE("STORE_PROCESS\n");
 		break;
 
 	case STORE_LETTER:
+		TRACE("STORE_LETTER\n");
 		LetterSystem(pkt);
 		break;
 
@@ -95,14 +104,18 @@ void CUser::ReqLoadWebItemMall()
 	foreach (itr, itemList)
 		GiveItem(itr->nNum, itr->sCount, false); 
 
-	for (int i = SLOT_MAX; i < SLOT_MAX+HAVE_MAX; i++)
+	SendItemWeight();
+
+	for (int i = 0; i < INVENTORY_TOTAL; i++)
 	{
-		_ITEM_DATA * pItem = GetItem(i);
+		_ITEM_DATA * pItem = &m_sItemArray[i];
 		result	<< pItem->nNum
-			<< pItem->sDuration
-			<< pItem->sCount
-			<< pItem->bFlag // item type flag (e.g. rented)
-			<< pItem->sRemainingRentalTime; // remaining time
+				<< pItem->sDuration
+				<< pItem->sCount
+				<< pItem->bFlag // item type flag (e.g. rented)
+				<< pItem->sRemainingRentalTime // remaining time
+				<< uint32(0) // unknown
+				<< pItem->nExpirationTime; // expiration date
 	}
 
 	Send(&result);
