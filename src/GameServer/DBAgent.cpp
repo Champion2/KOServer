@@ -81,7 +81,7 @@ void CDBAgent::ReportSQLError(OdbcError *pError)
 		pError->Source.c_str(), pError->ExtendedErrorMessage.c_str(), pError->ErrorMessage.c_str());
 
 	FastGuard lock(m_lock);
-	FILE *fp = fopen("./Logs/GameServer.log", "a");
+	FILE *fp = fopen("./errors.log", "a");
 	if (fp != nullptr)
 	{
 		fwrite(errorMessage.c_str(), errorMessage.length(), 1, fp);
@@ -405,7 +405,6 @@ bool CDBAgent::LoadUserData(string & strAccountID, string & strCharID, CUser *pU
 
 	pUser->m_strUserID = strCharID;
 	pUser->m_lastSaveTime = UNIXTIME;
-	pUser->m_lastBonusTime = UNIXTIME;
 
 	// Convert the old quest storage format to the new one.
 	pUser->m_questMap.clear();
@@ -966,7 +965,6 @@ bool CDBAgent::UpdateUser(string & strCharID, UserUpdateType type, CUser *pUser)
 	}
 
 	pUser->m_lastSaveTime = UNIXTIME;
-	pUser->m_lastBonusTime = UNIXTIME;
 	return true;
 }
 
@@ -1796,14 +1794,4 @@ void CDBAgent::UpdateUserDailyOp(std::string strUserId, uint8 type, int32 sUnixT
 	dbCommand->AddParameter(SQL_PARAM_INPUT, strUserId.c_str(), strUserId.length());
 	if (!dbCommand->Execute(string_format(_T("{CALL UPDATE_USER_DAILY_OP(?, %d, %d)}"), type, sUnixTime)))
 		ReportSQLError(m_GameDB->GetError());	
-}
-
-void CDBAgent::UpdateRanks()
-{
-	unique_ptr<OdbcCommand> dbCommand(m_GameDB->CreateCommand());
-	if (dbCommand.get() == nullptr)
-		return;
-
-	if (!dbCommand->Execute(_T("{CALL UPDATE_RANKS}")))
-		ReportSQLError(m_GameDB->GetError());
 }
